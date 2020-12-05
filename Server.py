@@ -1,87 +1,110 @@
-import socket
-import sys
-from multiprocessing import Process
+# Python program to implement server side of chat room.  
+import socket  
+import select  
+import sys  
+from thread import *
+  
+"""The first argument AF_INET is the address domain of the  
+socket. This is used when we have an Internet Domain with  
+any two hosts The second argument is the type of socket.  
+SOCK_STREAM means that data or characters are read in  
+a continuous flow."""
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
+  
+# checks whether sufficient arguments have been provided  
+#if len(sys.argv) != 3:  
+#    print ("Correct usage: script, IP address, port number") 
+#    exit()  
+  
+# takes the first argument from command prompt as IP address  
+#IP_address = str(sys.argv[1])  
+IP_address = "127.0.0.1"
 
-class Server(object):
-
-    def main(self):
-        self.connectionsStack = []
-        # Create a TCP/IP socket
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        # Bind the socket to the port
-        server_address = ('localhost', 10000)
-        print >>sys.stderr, 'starting up on %s port %s' % server_address
-        self.sock.bind(server_address)
-
-        # Listen for incoming connections
-        self.sock.listen(128)
-
-        # 1. Need a way to listen to connection and for messages simultaniously. 
-            # (Multiprocess uses diff memory but GIL)
-            # (Multithreading uses same memory so can't listen for connections and messages simultaneously)
-        # 2. Print the names in different colours in terminal (Neaten it out)
-            # https://stackoverflow.com/questions/287871/how-to-print-colored-text-in-python
-        # 3. Add encryption process
-            # i.   Generate RSA keys (Public Private key)... publish public key while establishing connection
-            # ii.  Generate DH key using Public/Private keys (on Server and Clients side)
-            # iii. Encrypt using DH Key AES Encryption
-
-            # iv.  Decrypt and print message on server side. Encrypt and Broadcast message to all other clients.
-            # v.   Decrypt and print message on client side
-        # 4. Handle following situation
-            # i. Leaving chat
-
-    
-    def listForConnections(self):
-        while True:
-            # Wait for a connection
-            print >>sys.stderr, 'waiting for a connection'
-            
-            #connection, client_address = self.sock.accept()
-            name = connection.recv(16)
-            
-            print "Connection: ", connection
-            print "Client Add: ", client_address
-            
-            print name, " just joined"
-            self.connectionsStack.append([connection,client_address,name]) 
-            print "Over Here1! + len: ", len(self.connectionsStack)
-        
-    def listenForMessages(self):
-        while True:
-            print "Over Here2! + len: ", len(self.connectionsStack)
-            for conn in self.connectionsStack:
-                message = conn[0].recv(16)
-                print "Over Here!"
-                print >>sys.stderr, conn[2],': "%s"' % data
-
-                self.broadcastMessageOthers(message,conn)
-
-        '''    try:
-            print >>sys.stderr, 'connection from', client_address
-
-            # Receive the data in small chunks and retransmit it
-            while True:
-
-                data = connection.recv(16)
-                print >>sys.stderr, 'received "%s"' % data
-                if data:
-                    print >>sys.stderr, 'sending data back to the client'
-                    connection.sendall(data)
-                else:
-                    print >>sys.stderr, 'no more data from', client_address
-                    break
-                
-        finally:
-            # Clean up the connection
-            connection.close()'''
-
-    def broadcastMessageOthers(self,connections,message,conn):
-        #Broadcast message to other clients connected
-        for nConn in self.connectionsStack:
-            if conn[0] != nConn[0]:
-                nConn[0].sendall(conn[2],": ",data)
-
-if __name__ == '__main__':
-    Server().main()
+# takes second argument from command prompt as port number  
+#Port = int(sys.argv[2])  
+Port = 8777 
+"""  
+binds the server to an entered IP address and at the  
+specified port number.  
+The client must be aware of these parameters  
+"""
+server.bind((IP_address, Port))  
+  
+"""  
+listens for 100 active connections. This number can be  
+increased as per convenience.  
+"""
+server.listen(100)  
+  
+list_of_clients = []  
+  
+def clientthread(conn, addr):  
+  
+    # sends a message to the client whose user object is conn  
+    conn.send("Welcome to this chatroom!")  
+  
+    while True:  
+            try:  
+                message = conn.recv(2048)  
+                if message:  
+  
+                    """prints the message and address of the  
+                    user who just sent the message on the server  
+                    terminal"""
+                    print ("<" + addr[0] + "> " + message)  
+  
+                    # Calls broadcast function to send message to all  
+                    message_to_send = "<" + addr[0] + "> " + message  
+                    broadcast(message_to_send, conn)  
+  
+                else:  
+                    """message may have no content if the connection  
+                    is broken, in this case we remove the connection"""
+                    remove(conn)  
+  
+            except:  
+                continue
+  
+"""Using the below function, we broadcast the message to all  
+clients who's object is not the same as the one sending  
+the message """
+def broadcast(message, connection):  
+    for clients in list_of_clients:  
+        if clients!=connection:  
+            try:  
+                clients.send(message)  
+            except:  
+                clients.close()  
+  
+                # if the link is broken, we remove the client  
+                remove(clients)  
+  
+"""The following function simply removes the object  
+from the list that was created at the beginning of  
+the program"""
+def remove(connection):  
+    if connection in list_of_clients:  
+        list_of_clients.remove(connection)  
+  
+while True:  
+  
+    """Accepts a connection request and stores two parameters,  
+    conn which is a socket object for that user, and addr  
+    which contains the IP address of the client that just  
+    connected"""
+    conn, addr = server.accept()  
+  
+    """Maintains a list of clients for ease of broadcasting  
+    a message to all available people in the chatroom"""
+    list_of_clients.append(conn)  
+  
+    # prints the address of the user that just connected  
+    print (addr[0] + " connected") 
+  
+    # creates and individual thread for every user  
+    # that connects  
+    start_new_thread(clientthread,(conn,addr))    
+  
+conn.close()  
+server.close()  
