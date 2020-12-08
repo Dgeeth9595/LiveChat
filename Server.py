@@ -39,7 +39,7 @@ server.listen(100)
   
 list_of_clients = []  
   
-def clientthread(conn, addr):  
+def clientthread(conn, name):  
   
     # sends a message to the client whose user object is conn  
     conn.send("Welcome to this chatroom!")  
@@ -52,10 +52,10 @@ def clientthread(conn, addr):
                     """prints the message and address of the  
                     user who just sent the message on the server  
                     terminal"""
-                    print ("<" + addr[0] + "> " + message)  
+                    print (name + ": " + message)  
   
                     # Calls broadcast function to send message to all  
-                    message_to_send = "<" + addr[0] + "> " + message  
+                    message_to_send = name + ": " + message  
                     broadcast(message_to_send, conn)  
   
                 else:  
@@ -95,16 +95,19 @@ while True:
     connected"""
     conn, addr = server.accept()  
   
+    # save name
+    name = conn.recv(2048)  
+
     """Maintains a list of clients for ease of broadcasting  
     a message to all available people in the chatroom"""
     list_of_clients.append(conn)  
   
     # prints the address of the user that just connected  
-    print (addr[0] + " connected") 
+    print (name + " connected") 
   
     # creates and individual thread for every user  
     # that connects  
-    start_new_thread(clientthread,(conn,addr))    
+    start_new_thread(clientthread,(conn,name))    
   
 conn.close()  
 server.close()  

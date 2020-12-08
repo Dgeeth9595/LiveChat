@@ -13,7 +13,9 @@ IP_address = "127.0.0.1"
 Port = 8777
 
 server.connect((IP_address, Port))  
-  
+name = raw_input("Name: ")
+server.send(name)
+
 while True:  
   
     # maintains a list of possible input streams  
@@ -36,7 +38,7 @@ while True:
         else:  
             message = sys.stdin.readline()  
             server.send(message)  
-            sys.stdout.write("<You>")  
+            sys.stdout.write("You: ")  
             sys.stdout.write(message)  
             sys.stdout.flush()  
 server.close()
