@@ -10,12 +10,15 @@ now = datetime.datetime.now()
 d = now.strftime("%H-%M-%S")
 
 name = raw_input("give a name pls :)")
-DIR = os.getcwd()
+DIR = "./Certs"
+if not os.path.exists(DIR):
+    os.mkdir(DIR)
 key = crypto.PKey()
-keypath = DIR + name + '-' + str(d) + '.key'
-csrpath = DIR + name + '-' + str(d) + '.csr'
-crtpath = DIR + name + '-' + str(d) + '.crt'
+keypath = DIR + '/' + name + '-' + str(d) + '.key'
+csrpath = DIR + '/' + name + '-' + str(d) + '.csr'
+crtpath = DIR + '/' + name + '-' + str(d) + '.crt'
 
+#Private key
 def generatekey():
 
     if os.path.exists(keypath):
