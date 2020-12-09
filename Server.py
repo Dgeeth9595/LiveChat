@@ -18,6 +18,7 @@ a continuous flow."""
 #DUDE -> Add MTLS Secure SOCKET Creation. 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
+print "Testing"
   
 # checks whether sufficient arguments have been provided  
 #if len(sys.argv) != 3:  
