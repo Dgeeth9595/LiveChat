@@ -11,7 +11,14 @@ from cryptography.hazmat.primitives.asymmetric import padding
 import socket  
 import select  
 import sys  
+import os
+import json
+from base64 import b64encode
+from base64 import b64decode
 from thread import *
+
+from Cryptodome.Cipher import AES
+from Cryptodome.Random import get_random_bytes
   
 """The first argument AF_INET is the address domain of the  
 socket. This is used when we have an Internet Domain with  
@@ -63,13 +70,31 @@ server_dh_pub_key = server_dh_private_key.public_key()
 def clientthread(conn, name, shared_key):  
   
     # sends a message to the client whose user object is conn  
-    conn.send("Welcome to this chatroom!")  
-  
+    #####-----10. ENCRYPT MSG-----#####
+    message =  "Welcome to this chatroom!"
+    header = b"header"
+    cipher = AES.new(shared_key[:16], AES.MODE_OCB)
+    cipher.update(header)
+    ciphertext, tag = cipher.encrypt_and_digest(message)
+
+    json_k = [ 'nonce', 'header', 'ciphertext', 'tag' ]
+    json_v = [ b64encode(x).decode('utf-8') for x in cipher.nonce, header, ciphertext, tag ]
+    enc_result = json.dumps(dict(zip(json_k, json_v)))
+    conn.send(enc_result)  
+    #####-----10. ENCRYPT MSG-----#####
+    
     while True:  
             try:  
-                message = conn.recv(2048)  
-                #####-----9. DECRYPT MSG-----#####
 
+                ciphertext = conn.recv(2048)  
+                #####-----9. DECRYPT MSG-----#####
+                b64 = json.loads(ciphertext)
+                json_k = [ 'nonce', 'header', 'ciphertext', 'tag' ]
+                jv = {k:b64decode(b64[k]) for k in json_k}
+
+                cipher = AES.new(shared_key[:16], AES.MODE_OCB, nonce=jv['nonce'])
+                cipher.update(jv['header'])
+                message = cipher.decrypt_and_verify(jv['ciphertext'], jv['tag'])
                 #####-----9. DECRYPT MSG-----#####
                 if message:  
   
@@ -87,7 +112,8 @@ def clientthread(conn, name, shared_key):
                     is broken, in this case we remove the connection"""
                     remove(conn)  
   
-            except:  
+            except Exception as ex:  
+                print "Exception1: ", ex
                 continue
   
 """Using the below function, we broadcast the message to all  
@@ -96,12 +122,22 @@ the message """
 def broadcast(message, connection):  
     for clients in list_of_clients:  
         if clients!=connection:  
-            try:  
+            try:
                 #####-----10. ENCRYPT MSG-----#####
-                print "Shared Key: ", list_of_clients[clients]
+                client_shared_key = list_of_clients[clients]
+                header = b"header"
+                cipher = AES.new(client_shared_key[:16], AES.MODE_OCB)
+                cipher.update(header)
+                ciphertext, tag = cipher.encrypt_and_digest(message)
+
+                json_k = [ 'nonce', 'header', 'ciphertext', 'tag' ]
+                json_v = [ b64encode(x).decode('utf-8') for x in cipher.nonce, header, ciphertext, tag ]
+                enc_result = json.dumps(dict(zip(json_k, json_v)))
+                clients.send(enc_result)  
                 #####-----10. ENCRYPT MSG-----#####
-                clients.send(message)  
-            except:  
+                
+            except Exception as ex:  
+                print "Exception2: ", ex
                 clients.close()  
   
                 # if the link is broken, we remove the client  

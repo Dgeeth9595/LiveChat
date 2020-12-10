@@ -12,9 +12,12 @@ import socket
 import select  
 import sys  
 import os
+import json
+from base64 import b64encode
+from base64 import b64decode
 
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from Cryptodome.Cipher import AES
+from Cryptodome.Random import get_random_bytes
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
 #if len(sys.argv) != 3:  
@@ -98,24 +101,33 @@ while True:
   
     for socks in read_sockets:  
         if socks == server:  
-            message = socks.recv(2048)  
+            ciphertext = socks.recv(2048)  
             #####-----7. DECRYPT MSG-----#####
-            
+            b64 = json.loads(ciphertext)
+            json_k = [ 'nonce', 'header', 'ciphertext', 'tag' ]
+            jv = {k:b64decode(b64[k]) for k in json_k}
+
+            cipher = AES.new(client_shared_key[:16], AES.MODE_OCB, nonce=jv['nonce'])
+            cipher.update(jv['header'])
+            message = cipher.decrypt_and_verify(jv['ciphertext'], jv['tag'])
+            print message
             #####-----7. DECRYPT MSG-----#####
-            print (message)  
         else:  
             message = sys.stdin.readline()  
 
             #####-----6. ENCRYPT MSG-----#####
             header = b"header"
-            cipher = AES.new(client_shared_key, AES.MODE_OCB)
+            cipher = AES.new(client_shared_key[:16], AES.MODE_OCB)
             cipher.update(header)
             ciphertext, tag = cipher.encrypt_and_digest(message)
-            print ciphertext
-            print tag
+
+            json_k = [ 'nonce', 'header', 'ciphertext', 'tag' ]
+            json_v = [ b64encode(x).decode('utf-8') for x in cipher.nonce, header, ciphertext, tag ]
+            enc_result = json.dumps(dict(zip(json_k, json_v)))
+            server.send(enc_result)
             #####-----6. ENCRYPT MSG-----#####
 
-            server.send(message)  
+            #server.send(message)  
             sys.stdout.write("You: ")  
             sys.stdout.write(message)  
             sys.stdout.flush()  
