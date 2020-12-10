@@ -1,24 +1,25 @@
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import load_pem_public_key, load_pem_private_key
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+
 # Python program to implement server side of chat room.  
 import socket  
 import select  
 import sys  
 from thread import *
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import dh
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.serialization import load_pem_public_key, load_pem_private_key
-#from cryptography import x509
-import os
-
+  
 """The first argument AF_INET is the address domain of the  
 socket. This is used when we have an Internet Domain with  
 any two hosts The second argument is the type of socket.  
 SOCK_STREAM means that data or characters are read in  
 a continuous flow."""
-#DUDE -> Add MTLS Secure SOCKET Creation. 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
-print "Testing"
   
 # checks whether sufficient arguments have been provided  
 #if len(sys.argv) != 3:  
@@ -45,40 +46,21 @@ increased as per convenience.
 """
 server.listen(100)  
   
-#2b. DH Key Exchange -> shared_key
-#If DH key doesn't exist, generate
+list_of_clients = {}  
 
-if not os.path.exists("./Certs/server_public_key.pem"):
-    #Generate DC Public and Private Key for Key Exchange
-    parameters = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
-    server_private_key = parameters.generate_private_key()
-    server_public_key = server_private_key.public_key()
+#####-----1. Generate Server RSA Keys-----#####
+server_rsa_private_key = rsa.generate_private_key( public_exponent=65537, key_size=4096, backend=default_backend())
+server_rsa_public_key = server_rsa_private_key.public_key()
+#####-----1. Generate Server RSA Keys-----#####
 
-    server_public_key_pem = server_public_key.public_bytes( encoding=serialization.Encoding.PEM,  format=serialization.PublicFormat.SubjectPublicKeyInfo )
-    server_private_key_pem = server_private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8,encryption_algorithm=serialization.BestAvailableEncryption(b'testpassword'))
+#####-----2. Generate Server DH Keys-----#####
+parameters = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
 
-    if not os.path.exists("./Certs"):
-        os.mkdir("./Certs")
-    print "HERE?"
-    open("./Certs/server_public_key.pem","w").write(server_public_key_pem)
-    open("./Certs/server_private_key.key","w").write(server_private_key_pem)
-else:
-    
-    server_public_key_pem = open("./Certs/server_public_key.pem","r").read()
-    server_private_key_pem = open("./Certs/server_private_key.key","r").read()
-
-    server_public_key = load_pem_public_key(server_public_key_pem,backend=default_backend())
-    server_private_key = load_pem_private_key(server_private_key_pem, password=b'testpassword')
-    print "Over HERE: ", server_private_key
-
-
-print server_public_key
-print server_private_key
-#Else load
-
-list_of_clients = []  
+server_dh_private_key = parameters.generate_private_key()
+server_dh_pub_key = server_dh_private_key.public_key()
+#####-----2. Generate Server DH Keys-----#####
   
-def clientthread(conn, name):  
+def clientthread(conn, name, shared_key):  
   
     # sends a message to the client whose user object is conn  
     conn.send("Welcome to this chatroom!")  
@@ -86,7 +68,9 @@ def clientthread(conn, name):
     while True:  
             try:  
                 message = conn.recv(2048)  
-                #4. AES Decryption using shared key
+                #####-----9. DECRYPT MSG-----#####
+
+                #####-----9. DECRYPT MSG-----#####
                 if message:  
   
                     """prints the message and address of the  
@@ -113,7 +97,9 @@ def broadcast(message, connection):
     for clients in list_of_clients:  
         if clients!=connection:  
             try:  
-                #5. AES Encryption w shared_key for client
+                #####-----10. ENCRYPT MSG-----#####
+                print "Shared Key: ", list_of_clients[clients]
+                #####-----10. ENCRYPT MSG-----#####
                 clients.send(message)  
             except:  
                 clients.close()  
@@ -136,27 +122,73 @@ while True:
     connected"""
     conn, addr = server.accept()  
   
-    client_name = conn.recv(2048)  
-    client_pubKey = conn.recv(2048)  
-    print (client_name + " pub key: "+ client_pubKey) 
- 
-    server_public_key_pem = server_public_key.public_bytes( encoding=serialization.Encoding.PEM,  format=serialization.PublicFormat.SubjectPublicKeyInfo )
-    print ("Servers Pub key: ", server_public_key_pem) 
-    print ("Servers Pub key Obj: ", load_pem_public_key(server_public_key_pem))
-    conn.send(server_public_key_pem)
+    # save name
+    name = conn.recv(2048)  
 
-    #print (client_public_key)
+    #####-----3. Exchange RSA Pub Key-----#####
+    # Server Pub Key Obj -> Server Pub Key PEM
+    server_rsa_public_key_pem = server_rsa_public_key.public_bytes(encoding=serialization.Encoding.PEM,format=serialization.PublicFormat.SubjectPublicKeyInfo)
+
+    # Send Server Pub Key PEM
+    conn.send(server_rsa_public_key_pem)
+
+    # Recieve Client Pub Key PEM
+    client_rsa_public_key_pem = conn.recv(2048)
+ 
+    # Client Pub Key PEM -> Client Pub Key Obj
+    client_rsa_public_key = load_pem_public_key(client_rsa_public_key_pem, backend=default_backend())
+    #####-----3. Exchange RSA Pub Key-----#####
+
+
+    #####-----4. Generate Clients DH Keys-----#####
+    client_dh_private_key = parameters.generate_private_key()
+    client_dh_pub_key = client_dh_private_key.public_key()
+    #####-----4. Generate Clients DH Keys-----#####
+
+
+    #####-----5. Encrypt Clients DH Keys with Clients RSA Pub Key-----#####
+    # client_dh_pub_key -> client_dh_pub_key_pem
+    client_dh_pub_key_pem = client_dh_pub_key.public_bytes( encoding=serialization.Encoding.PEM,  format=serialization.PublicFormat.SubjectPublicKeyInfo )
+    # client_dh_priv_key -> client_dh_priv_key_pem
+    client_dh_private_key_pem = client_dh_private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8,encryption_algorithm=serialization.BestAvailableEncryption(b'testpassword'))
+
+    # encrypt client_dh_pub_key & client_dh_priv_key_pem with client_rsa_public_key_pem
+    enc_client_dh_pub_key_pem = client_rsa_public_key.encrypt(client_dh_pub_key_pem, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA1()),algorithm=hashes.SHA1(),label=None))
+    enc_client_dh_private_key_pem = client_rsa_public_key.encrypt(client_dh_private_key_pem, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA1()),algorithm=hashes.SHA1(),label=None))
+    #####-----5. Encrypt Clients DH Keys with Clients RSA Pub Key-----#####
+
+
+    #####-----6. Send Clients Encrypted DH Keys-----#####
+    conn.send(enc_client_dh_pub_key_pem)
+    rec = conn.recv(2048)
+    conn.send(enc_client_dh_private_key_pem)
+    #####-----6. Send Clients Encrpyted DH Keys-----#####
+
+    
+    #####-----7. Send Servers Pub DH Keys-----#####
+    # server_dh_pub_key -> server_dh_pub_key_pem
+    server_dh_pub_key_pem = server_dh_pub_key.public_bytes( encoding=serialization.Encoding.PEM,  format=serialization.PublicFormat.SubjectPublicKeyInfo )
+    
+    # send server_dh_pub_key_pem
+    conn.send(server_dh_pub_key_pem)
+    #####-----7. Send Servers Pub DH Keys-----#####
+
+    
+    #####-----8. Generate DH Shared Key with Servers Priv DH Key + Clients Pub DH Key-----#####
+    shared_key = server_dh_private_key.exchange(client_dh_pub_key)
+    done = conn.recv(2048)
+    #####-----8. Generate DH Shared Key with Servers Priv DH Key + Clients Pub DH Key-----#####
 
     """Maintains a list of clients for ease of broadcasting  
     a message to all available people in the chatroom"""
-    list_of_clients.append(conn)  
+    list_of_clients[conn] = shared_key  
   
     # prints the address of the user that just connected  
-    print (client_name + " connected") 
+    print (name + " connected") 
   
     # creates and individual thread for every user  
     # that connects  
-    start_new_thread(clientthread,(conn,client_name))    
+    start_new_thread(clientthread,(conn,name,shared_key))    
   
 conn.close()  
 server.close()  
